@@ -27,13 +27,13 @@ class Client:
     def send_data(self):
         self.sock.sendall(self.data + "\n")
 
-def main():
-    client = Client('localhost',8787,json.dumps([["forward",100],["right",90],["forward",100]]))
+def main(argv):
+    client = Client(argv[1],8787,json.dumps([["forward",100],["right",90],["forward",100]]))
     client.send_data()
     print json.dumps([["forward",100],["right",90],["forward",100]])
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
 
 
 
