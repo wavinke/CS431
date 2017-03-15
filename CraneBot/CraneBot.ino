@@ -19,11 +19,18 @@ long endPos; //top of range
 
 MeEncoderOnBoard Encoder_1(SLOT1);
 MeEncoderOnBoard Encoder_2(SLOT2);
+
+
 MeEncoderOnBoard Encoder_3(SLOT3);
-
-
+MeEncoderOnBoard Encoder_4(SLOT4); //encoder for claw motor
 
 MeUltrasonicSensor ultraSensor( PORT_8 );
+
+int rx2 = 17;
+int tx2 = 16;
+SoftwareSerial toPi( rx2, tx2 );
+
+
 
 String command;
 float dist;
@@ -56,6 +63,15 @@ void isr_process_encoder3(void){
   else Encoder_3.pulsePosPlus();
 }
 
+void isr_process_encoder4(void){
+  if(digitalRead(Encoder_4.getPortB()) == 0) {
+    Encoder_4.pulsePosMinus(); 
+  }
+  else Encoder_4.pulsePosPlus();
+}
+
+
+
 void Forward(void)
 {
   Encoder_1.setMotorPwm(-moveSpeed);
@@ -66,6 +82,11 @@ void ForwardSlow(void)
 {
   Encoder_1.setMotorPwm(-moveSpeed/2);
   Encoder_2.setMotorPwm(moveSpeed/2);
+}
+
+void ForwardFast(void){
+ Encoder_1.setMotorPwm( -255 );
+ Encoder_2.setMotorPwm( 255 ); 
 }
 
 void Backward(void)
@@ -100,14 +121,14 @@ void TurnRight(void)
 
 void TurnInplaceRight(void)
 {
-  Encoder_1.setMotorPwm( moveSpeed );
-  Encoder_2.setMotorPwm( moveSpeed );
+  Encoder_1.setMotorPwm( -moveSpeed*2 );
+  Encoder_2.setMotorPwm( -moveSpeed*2 );
 }
 
 void TurnInplaceLeft(void)
 {
-  Encoder_1.setMotorPwm( -moveSpeed );
-  Encoder_2.setMotorPwm( -moveSpeed );
+  Encoder_1.setMotorPwm( moveSpeed*2 );
+  Encoder_2.setMotorPwm( moveSpeed*2 );
 }
 
 
@@ -136,45 +157,6 @@ void ArmStop( void ){
   Encoder_3.setMotorPwm( 0 ); 
 }
 
-void ArmReset( void ){
-  Encoder_3.setMotorPwm( 0 );
-  Encoder_3.move( startPos, moveSpeed );
-  
-}
-
-void ArmZero( void ){
-  
-  Encoder_3.setMotorPwm( -moveSpeed );
-  delay( 1000 );
-  
-  //Encoder_3.setMotorPwm(0);
-
-  Encoder_3.updateCurPos();
-  long pos0 = Encoder_3.getCurPos();
-  long pos1;
-  int time = 0;
-  while( true ){ //watch the arm speed until it stops on the top
-
-    if( time%10000 == 0){
-      Encoder_3.updateCurPos();
-      pos1 = pos0;
-      pos0 = Encoder_3.getCurrentSpeed(); 
-    }
-     
-    if( (pos0 - pos1)<1 ){ //arm stops moving
-        Encoder_3.setMotorPwm( 0 );
-        break;     
-    }
-
-   // Serial.print(" WHILE LOOP \n");
-   // Serial.print( (pos1 - pos0 ) ); 
-  }
-
-
-  long travel = 1000;
-  Encoder_3.moveTo( pos1-travel, -moveSpeed);
- 
-}
 
 
 void ArmZero2( void ){ //this is the working zero method
@@ -190,19 +172,15 @@ void ArmZero2( void ){ //this is the working zero method
     }else Encoder_3.updateSpeed(); 
   }
 
-  
-  
   Encoder_3.updateCurPos();
   long top = Encoder_3.getCurPos();
 
-  
   //Serial.print("\nTOP:");
   //Serial.print( top );
 
   endPos = top;
   startPos = top + 1000; //top of crane-1000 degrees is botton of crane arc
-  //ArmReset2();
-   
+
 }
 
 void ArmReset2( void ){ //this is the working reset
@@ -213,7 +191,7 @@ void ArmReset2( void ){ //this is the working reset
   Encoder_3.setMotorPwm( moveSpeed );
 
 
-  while( curPos < startPos){
+  while( curPos < (startPos-500)){
     Encoder_3.updateCurPos();
     curPos =  Encoder_3.getCurPos();
   }
@@ -221,6 +199,65 @@ void ArmReset2( void ){ //this is the working reset
   
 }
 
+
+
+void clawOpen( void ){
+  Encoder_4.setMotorPwm( moveSpeed );
+}
+
+void clawClose( void ){
+  Encoder_4.setMotorPwm( -moveSpeed );
+}
+
+void clawStop( void ){
+    Encoder_4.setMotorPwm( 0 );
+}
+
+
+
+float scale; //used to compare motor rotation to track distance traveled
+
+void setTrackZero( void ){
+  Stop();
+
+  Encoder_1.updateCurPos();
+  Encoder_2.updateCurPos();
+  long startPos1 = Encoder_1.getCurPos();
+  long startPos2 = Encoder_2.getCurPos();
+  
+  float dist_i = ultraSensor.distanceCm();
+
+  ForwardSlow();
+  delay( 5000 );
+  Stop();
+  
+  float dist_f = ultraSensor.distanceCm();
+
+  Encoder_1.updateCurPos();
+  Encoder_2.updateCurPos();
+  long endPos1 = Encoder_1.getCurPos();
+  long endPos2 = Encoder_2.getCurPos();
+  
+  float motorTravel1 = endPos1 - startPos1;
+  float motorTravel2 = endPos2 - startPos2;
+  float deltaDist = dist_f - dist_i ;
+
+
+  Serial.print( "TRACK ZERO\n" );
+  Serial.print( motorTravel1 );
+  Serial.print( "\n" );
+  Serial.print( motorTravel2 );
+  Serial.print( "\n" );
+  Serial.print( deltaDist );
+  Serial.print( "\n" );
+
+  scale = ( abs(motorTravel1) + abs(motorTravel2))/2*deltaDist;
+  //assign scale, use average of both motors
+  
+  
+ 
+  
+}
   
     
  
@@ -235,12 +272,13 @@ void ArmReset2( void ){ //this is the working reset
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin( 115200 );
+  Serial.begin( 9600 );
   Serial3.begin(115200);
   delay(100);
   attachInterrupt(Encoder_1.getIntNum(), isr_process_encoder1, RISING);
   attachInterrupt(Encoder_2.getIntNum(), isr_process_encoder2, RISING);
   attachInterrupt(Encoder_3.getIntNum(), isr_process_encoder3, RISING);
+  attachInterrupt(Encoder_4.getIntNum(), isr_process_encoder4, RISING);
   count = 0;
 
   ArmZero2();
@@ -249,39 +287,55 @@ void setup() {
   
   ArmReset2();
   
+  
+  Serial.print( startPos );
+  Encoder_3.updateCurPos();
+  curPos = Encoder_3.getCurPos();
+  
+  //Serial.print( "startPos " );
   //Serial.print( startPos );
-  //Encoder_3.updateCurPos();
-  //startPos = Encoder_3.getCurPos();
+  
+  
+  //Serial.print( "\ncurPos ");
+  //Serial.print( curPos );
+
+  //Serial.print( "\nendPos ");
+  //Serial.print( endPos );
+
+  setTrackZero();
+  
+  
+  //clawOpen();
   
 }
 
 
 void loop() {
   // put your main code here, to run repeatedly:
-  delay(500);
-  if (Serial3.available() > 0) {   
-     command = Serial3.readString();
+  //delay(100);
+  //Serial.print( Serial3.available() );
+  //Serial.print("Hello");
+  //if (Serial3.available() > 0) {   
+     
+     command = Serial3.readString()[2];
+     Serial.print( "\n");
      Serial.print( command );
-  }
+  //}
 
   float dist = ultraSensor.distanceCm();
 
+    //Serial.print( "\ndist:");
+   //Serial.print( dist );
 
-  //if( steps%10000 == 0){
-    // Serial.print("Distance: ");
-    // Serial.print( dist );
-    // Serial.print(" cm \n" );
-    //Serial.print( (startPos - curPos)  );
-    //Serial.print( "\n" );
+
   
-  //}
-  
-  Encoder_3.updateCurPos();
-  curPos = Encoder_3.getCurPos();
+    Encoder_3.updateCurPos();
+    curPos = Encoder_3.getCurPos();
 
 
-  if (command == "w" && dist > 20.0) {
-      if(dist < 40.0) ForwardSlow();
+  if (command == "w") {
+      if(dist < 40.0) Stop();
+      else if(dist < 60.0) ForwardSlow();
       else Forward();
     //Serial.print("Going forward");
   }
@@ -297,44 +351,28 @@ void loop() {
     TurnInplaceRight();
     //Serial.print("Turning right");
   }
-  else if(command == "t" && startPos - curPos <= 0){
-        ArmUp();
-  }
-  else if(command == "g" &&  (startPos - curPos >= 975)){
+  else if(command == "t"){
+    if(curPos  > endPos){
+      ArmUp();
+  }else ArmStop();
+    
+  
+}
+  else if(command == "g"){
+      if(curPos  < startPos){
         ArmDown();
+      }else {
+        ArmStop();  
+      }
   }
-  else if( command = "q"){
+  else if( command == "q"){
       Stop();
+      ArmStop();
     //Serial.print("Stopping");
   }
- 
 
-  steps++;
-  //else Serial.print(command);
+
 
   
-
-  /*
-  if (steps%200000 < 50000) Forward();
-  else if( steps%200000 == 50000){
-     Stop();
-     //Serial.print( steps );
-  }
-  else if(steps%200000 > 50000 && steps%200000 < 100000)
-  {
-    //Serial.print("TURNING RIGHT IN PLACE");
-    TurnInplaceRight(); 
-  }
-	else if( steps%200000 == 100000) Stop();
-  else if(steps%200000 > 100000 && steps%200000 < 150000)
-  {
-    //Serial.print("TURNING LEFT IN PLACE");
-    TurnInplaceLeft(); 
-  }
-  else if( steps%200000 == 150000) Stop();
-  else if(steps%200000 > 150000 && steps%200000 < 199999) TurnLeft();
-  else Stop();
- 
-  */
   
 }
