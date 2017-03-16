@@ -1,10 +1,12 @@
 # author: Yashaswi Mohanty
 # date: 3/9/2017
 # file: Client.py
+
 import socket
 import json
 import sys
-
+import bluetooth
+import serial
 
 class Client:
     def __init__(self, host, port, data):
@@ -30,7 +32,7 @@ class Client:
 def main(argv):
     client = Client(argv[1],38787,json.dumps([["forward",100],["right",90],["forward",100]]))
     client.send_data()
-    print json.dumps([["forward",100],["right",90],["forward",100]])
+   # print json.dumps([["forward",100],["right",90],["forward",100]])
 
 if __name__ == '__main__':
     main(sys.argv)
