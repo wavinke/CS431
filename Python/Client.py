@@ -8,6 +8,8 @@ import sys
 import bluetooth
 import serial
 
+#bs = serial.Serial("/dev/rfcomm0", baudrate=115200)
+
 class Client:
     def __init__(self, host, port, data):
         self.host = host
@@ -30,9 +32,29 @@ class Client:
         self.sock.sendall(self.data + "\n")
 
 def main(argv):
-    client = Client(argv[1],38787,json.dumps([["forward",100],["right",90],["forward",100]]))
+    l = []
+    command = []
+    i = 0
+    while True:
+        print l
+        try:
+            if i%2 == 0:
+                command.append(raw_input().strip())
+            else:
+                command.append(int(raw_input()))
+                l.append(command)
+                command = []
+
+            if len(l) >1 and l[-1][0] == "END":
+                break
+            i += 1
+        except ValueError:
+            print "Input command-value pairs only!"
+
+    print l
+
+    client = Client('localhost',38787,json.dumps(l))
     client.send_data()
-   # print json.dumps([["forward",100],["right",90],["forward",100]])
 
 if __name__ == '__main__':
     main(sys.argv)
